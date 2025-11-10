@@ -16,6 +16,9 @@ public class PlayerController : MonoBehaviour
     public float minLookX = -80f;
     private float rotX = 0f;
 
+    [Header("Control Lock")]
+    public bool controlsEnabled = true;   // ✅ added — toggled by TestManager to lock player
+
     CharacterController cc;
     Vector3 velocity;
     bool isGrounded;
@@ -32,6 +35,9 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // ✅ prevent all input if controls are disabled (focus mode)
+        if (!controlsEnabled) return;
+
         HandleMouseLook();
         HandleMovement();
     }

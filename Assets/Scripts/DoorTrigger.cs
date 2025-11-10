@@ -1,29 +1,42 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using TMPro;
 
 public class DoorTrigger : MonoBehaviour
 {
-    public string sceneToLoad = "ColorShapeScene"; // change to actual scene name
-    public string hintText = "Press E to enter";
+    [Header("Scene Settings")]
+    public string sceneToLoad = "WelcomeScene";
+
+    [Header("UI Hint")]
+    public GameObject interactionHint; // assign in Inspector
 
     bool playerInside = false;
 
+    void Start()
+    {
+        if (interactionHint != null)
+            interactionHint.SetActive(false);
+    }
+
     void OnTriggerEnter(Collider other)
     {
+        Debug.Log("Entered trigger with: " + other.name);
         if (other.GetComponent<CharacterController>() != null)
         {
             playerInside = true;
-            // Optional: show UI hint using your UI Manager
-            Debug.Log("Player near door. " + hintText);
+            if (interactionHint != null)
+                interactionHint.SetActive(true);
         }
     }
 
     void OnTriggerExit(Collider other)
     {
+        Debug.Log("Exited trigger with: " + other.name);
         if (other.GetComponent<CharacterController>() != null)
         {
             playerInside = false;
-            // Optional: hide UI hint
-            Debug.Log("Left door area.");
+            if (interactionHint != null)
+                interactionHint.SetActive(false);
         }
     }
 
@@ -31,8 +44,7 @@ public class DoorTrigger : MonoBehaviour
     {
         if (playerInside && Input.GetKeyDown(KeyCode.E))
         {
-            // Use SceneManager directly to load
-            UnityEngine.SceneManagement.SceneManager.LoadScene(sceneToLoad);
+            SceneManager.LoadScene(sceneToLoad);
         }
     }
 }
