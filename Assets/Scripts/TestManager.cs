@@ -18,29 +18,58 @@ public class TestManager : MonoBehaviour
     public TextMeshProUGUI feedbackText;
     public PlayerController playerController;
     public Transform focusPoint;
-    public Transform testStartPosition;   // 🆕 Add this reference!
+    public Transform testStartPosition;
+    public AudioPhraseManager phraseManager; // 🎧 link phrase system
+
+    [Header("Audio Clips")]
+    public AudioClip correctSound;       // ✅ pleasant chime
+    public AudioClip wrongSound;         // ❌ try again sound
+    public AudioClip celebrationSound;   // 🎉 end of test sound
+
+    private AudioSource audioSource;
 
     [Header("Test Shapes")]
     public List<TestShape> testShapes = new List<TestShape>();
 
     private int currentIndex = 0;
     private int correctCount = 0;
+    private int wrongCount = 0;
+    private int totalClicks = 0;
+
     private bool testActive = false;
     private bool waitingForClick = false;
+
+    private float testStartTime;
+    private float testEndTime;
+
+    void Start()
+    {
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+            audioSource = gameObject.AddComponent<AudioSource>();
+
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f; // 2D
+    }
 
     public void StartTest()
     {
         if (testActive) return;
-        testActive = true;
 
-        StartCoroutine(MoveAndFocusPlayer());   // 🆕 new coroutine
+        testActive = true;
+        currentIndex = 0;
+        correctCount = 0;
+        wrongCount = 0;
+        totalClicks = 0;
+
+        StartCoroutine(MoveAndFocusPlayer());
     }
 
-    IEnumerator MoveAndFocusPlayer()  // 🆕 handles both move + focus
+    IEnumerator MoveAndFocusPlayer()
     {
-        playerController.controlsEnabled = false;
+        if (playerController != null)
+            playerController.controlsEnabled = false;
 
-        // STEP 1: Smoothly move player to start position
         Vector3 startPos = playerController.transform.position;
         Vector3 targetPos = new Vector3(testStartPosition.position.x, startPos.y, testStartPosition.position.z);
 
@@ -56,13 +85,11 @@ public class TestManager : MonoBehaviour
 
         playerController.transform.position = targetPos;
 
-        // STEP 2: Rotate player toward focus point
         yield return StartCoroutine(FocusCamera());
 
-        // STEP 3: Begin test after player is settled
+        testStartTime = Time.time;
+
         feedbackText.gameObject.SetActive(false);
-        currentIndex = 0;
-        correctCount = 0;
         NextQuestion();
     }
 
@@ -88,8 +115,6 @@ public class TestManager : MonoBehaviour
 
     void NextQuestion()
     {
-        Debug.Log("Next question: Find the " + testShapes[currentIndex].colorName + " " + testShapes[currentIndex].shapeName);
-
         if (currentIndex >= testShapes.Count)
         {
             EndTest();
@@ -97,13 +122,26 @@ public class TestManager : MonoBehaviour
         }
 
         var target = testShapes[currentIndex];
-        questionText.text = "Find the " + target.colorName + " " + target.shapeName;
+        Debug.Log($"Next question: Find the {target.colorName} {target.shapeName}");
+
+        questionText.text = $"Find the {target.colorName} {target.shapeName}";
         waitingForClick = true;
+
+        // 🗣 Play modular phrase
+        if (phraseManager != null)
+            StartCoroutine(phraseManager.PlayFindPhrase(target.colorName, target.shapeName));
     }
 
     public void ShapeClicked(GameObject clickedShape)
     {
         if (!testActive || !waitingForClick) return;
+        if (currentIndex >= testShapes.Count)
+        {
+            EndTest();
+            return;
+        }
+
+        totalClicks++;
 
         var target = testShapes[currentIndex];
         bool correct = (clickedShape == target.shapeObject);
@@ -113,11 +151,14 @@ public class TestManager : MonoBehaviour
         if (correct)
         {
             correctCount++;
-            StartCoroutine(ShowFeedback("✅ Correct!", Color.green, true, target));
+            PlaySound(correctSound);
+            StartCoroutine(ShowFeedback("Correct!", Color.green, true, target));
         }
         else
         {
-            StartCoroutine(ShowFeedback("❌ Try Again!", Color.red, false, target));
+            wrongCount++;
+            PlaySound(wrongSound);
+            StartCoroutine(ShowFeedback("Try Again!", Color.red, false, target));
         }
     }
 
@@ -149,17 +190,46 @@ public class TestManager : MonoBehaviour
 
     void EndTest()
     {
+        testEndTime = Time.time;
+        float totalTimeTaken = testEndTime - testStartTime;
+
         questionText.text = "Test complete!";
         feedbackText.gameObject.SetActive(true);
-        feedbackText.text = "You got " + correctCount + " out of " + testShapes.Count + " correct!";
+
+        string resultSummary =
+            $"You got {correctCount} out of {testShapes.Count} correct!\n" +
+            $"Wrong Attempts: {wrongCount}\n" +
+            $"Total Clicks: {totalClicks}\n" +
+            $"Time Taken: {totalTimeTaken:F1} seconds";
+
+        feedbackText.text = resultSummary;
         feedbackText.color = Color.white;
-        StartCoroutine(UnlockPlayer());
+
+        PlaySound(celebrationSound);
+
+        StartCoroutine(UnlockPlayerAndClearUI());
+        testActive = false;
     }
 
-    IEnumerator UnlockPlayer()
+    IEnumerator UnlockPlayerAndClearUI()
     {
-        yield return new WaitForSeconds(3f);
-        playerController.controlsEnabled = true;
+        yield return new WaitForSeconds(4f);
+
+        if (playerController != null)
+            playerController.controlsEnabled = true;
+
+        yield return new WaitForSeconds(2f);
+
+        questionText.text = "";
+        feedbackText.gameObject.SetActive(false);
+    }
+
+    void PlaySound(AudioClip clip)
+    {
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip);
+        }
     }
 
     Color GetColorFromName(string colorName)
